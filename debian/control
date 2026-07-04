@@ -1,0 +1,14 @@
+Source: pm-241-bt-open
+Section: text
+Priority: optional
+Maintainer: Bernie Innocenti <bernie@codewiz.org>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/codewiz/PM-241-BT-open
+
+Package: pm-241-bt-open
+Architecture: all
+Depends: ${misc:Depends}, cups, python3
+Description: Open CUPS driver for Phomemo PM-241-BT TSPL label printers
+ CUPS filter and PPD for the Phomemo PM-241-BT thermal label printer
+ and other TSPL-based label printers. No proprietary binaries.

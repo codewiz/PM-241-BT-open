@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Bernie Innocenti <bernie@codewiz.org>
+"""CUPS filter: application/vnd.cups-raster -> TSPL (TSC label printers).
+
+Open replacement for the proprietary rastertolabeltspl. Expects 1-bit
+grayscale raster (cupsBitsPerColor 1, cupsColorSpace 0/W) as produced by
+the accompanying PPD: CUPS raster packs rows MSB-first with 0=black,
+which is exactly TSPL's BITMAP convention, so rows pass through as-is.
+
+Usage (by cupsd): rastertotspl job user title copies options [file]
+"""
+
+import struct
+import sys
+
+V1_HEADER = 420    # serialized cups_page_header_t
+V2_HEADER = 1796   # serialized cups_page_header2_t (v2 and v3 streams)
+
+SYNCS = {
+    b"RaSt": (">", 1, V1_HEADER), b"tSaR": ("<", 1, V1_HEADER),
+    b"RaS2": (">", 2, V2_HEADER), b"2SaR": ("<", 2, V2_HEADER),
+    b"RaS3": (">", 3, V2_HEADER), b"3SaR": ("<", 3, V2_HEADER),
+}
+
+
+def read_exact(f, n):
+    buf = f.read(n)
+    if buf and len(buf) < n:
+        raise EOFError("truncated raster stream")
+    return buf
+
+
+def decompress_page(f, endian, bytes_per_line, height):
+    """CUPS raster v2 PackBits-style decompression."""
+    lines = []
+    while len(lines) < height:
+        repeat = read_exact(f, 1)[0] + 1
+        line = bytearray()
+        while len(line) < bytes_per_line:
+            n = read_exact(f, 1)[0]
+            if n <= 127:
+                line += read_exact(f, 1) * (n + 1)
+            else:
+                line += read_exact(f, 257 - n)
+        lines += [bytes(line)] * repeat
+    return b"".join(lines[:height])
+
+
+def parse_options(argv):
+    opts = {}
+    if len(argv) > 5:
+        for tok in argv[5].split():
+            k, _, v = tok.partition("=")
+            opts[k] = v
+    return opts
+
+
+def main():
+    infile = open(sys.argv[6], "rb") if len(sys.argv) > 6 else sys.stdin.buffer
+    out = sys.stdout.buffer
+    opts = parse_options(sys.argv)
+
+    sync = read_exact(infile, 4)
+    if sync not in SYNCS:
+        sys.stderr.write("ERROR: not a CUPS raster stream\n")
+        return 1
+    endian, version, header_size = SYNCS[sync]
+
+    page = 0
+    while True:
+        header = infile.read(header_size)
+        if not header:
+            break
+        if len(header) < header_size:
+            raise EOFError("truncated page header")
+        u32 = lambda off: struct.unpack_from(endian + "I", header, off)[0]
+        xdpi, ydpi = u32(276), u32(280)
+        width, height = u32(372), u32(376)
+        bpp, bytes_per_line = u32(388), u32(392)
+        if bpp != 1:
+            sys.stderr.write("ERROR: expected 1-bit raster, got %d bpp\n" % bpp)
+            return 1
+
+        if version == 3:
+            data = read_exact(infile, bytes_per_line * height)
+        else:
+            data = decompress_page(infile, endian, bytes_per_line, height)
+
+        # Row padding bits beyond cupsWidth arrive as 0, which TSPL would
+        # print as black; force them white (1).
+        data_bytes = (width + 7) // 8
+        pad_mask = (1 << (-width % 8)) - 1
+        if pad_mask or data_bytes < bytes_per_line:
+            data = bytearray(data)
+            for row in range(0, len(data), bytes_per_line):
+                data[row + data_bytes - 1] |= pad_mask
+                for i in range(row + data_bytes, row + bytes_per_line):
+                    data[i] = 0xFF
+            data = bytes(data)
+
+        page += 1
+        sys.stderr.write("PAGE: %d 1\n" % page)
+
+        width_mm = round(width * 25.4 / xdpi)
+        height_mm = round(height * 25.4 / ydpi)
+        gap = int(opts.get("GapHeight", "3"))
+        gap_off = int(opts.get("GapOffset", "0"))
+        tracking = opts.get("zeMediaTracking", "Gap")
+
+        out.write(b"SIZE %d mm,%d mm\r\n" % (width_mm, height_mm))
+        if tracking == "Continuous":
+            out.write(b"GAP 0 mm,0 mm\r\n")
+        elif tracking == "BLine":
+            out.write(b"BLINE %d mm,%d mm\r\n" % (gap, gap_off))
+        else:
+            out.write(b"GAP %d mm,%d mm\r\n" % (gap, gap_off))
+        if opts.get("Darkness", "Default") != "Default":
+            out.write(b"DENSITY %d\r\n" % int(opts["Darkness"]))
+        if opts.get("zePrintRate", "Default") != "Default":
+            out.write(b"SPEED %d\r\n" % int(opts["zePrintRate"]))
+        out.write(b"DIRECTION 0,0\r\n")
+        out.write(b"CLS\r\n")
+        out.write(b"BITMAP 0,0,%d,%d,0," % (bytes_per_line, height))
+        out.write(data)
+        out.write(b"\r\nPRINT 1,1\r\n")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
