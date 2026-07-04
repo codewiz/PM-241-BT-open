@@ -11,7 +11,7 @@ rpm:
     - git archive --format=tar.gz --prefix="PM-241-BT-open-$version/"
         -o "$HOME/rpmbuild/SOURCES/PM-241-BT-open-$version.tar.gz" HEAD
     - rpmbuild -ba pm-241-bt-open.spec
-    - cupstestppd -W translations -W sizes PM-241-BT-open.ppd
+    - cupstestppd -W all PM-241-BT-open.ppd
     - mkdir dist
     - cp "$HOME"/rpmbuild/RPMS/noarch/*.rpm "$HOME"/rpmbuild/SRPMS/*.rpm dist/
   artifacts:
@@ -22,7 +22,7 @@ deb:
   image: debian:stable
   script:
     - apt-get update && apt-get install -y --no-install-recommends
-        build-essential debhelper devscripts git-core ca-certificates
+        build-essential debhelper git-core ca-certificates
     - upstream=$(dpkg-parsechangelog -S Version | sed 's/-[^-]*$//')
     - git config --global --add safe.directory "$PWD"
     - git archive --format=tar.gz --prefix="pm-241-bt-open-$upstream/"

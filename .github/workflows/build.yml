@@ -25,7 +25,7 @@ jobs:
           mkdir dist
           cp "$HOME"/rpmbuild/RPMS/noarch/*.rpm "$HOME"/rpmbuild/SRPMS/*.rpm dist/
       - name: Validate PPD
-        run: cupstestppd -W translations -W sizes PM-241-BT-open.ppd
+        run: cupstestppd -W all PM-241-BT-open.ppd
       - uses: actions/upload-artifact@v4
         with:
           name: rpm
@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends debhelper devscripts
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential debhelper
       - name: Build deb
         run: |
           upstream=$(dpkg-parsechangelog -S Version | sed 's/-[^-]*$//')
