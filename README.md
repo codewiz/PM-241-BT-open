@@ -61,8 +61,10 @@ The PM-241-BT reports a blank MFG field in its IEEE 1284 device ID.
 Versions of python-cupshelpers (system-config-printer) up to at least
 1.5.18 refuse to match any PPD whose device ID has an empty MFG, so
 KDE/GNOME printer tools will not auto-select this driver until the fix
-lands (see the bug report linked below); selecting the driver manually
-works fine. The CUPS web interface is not affected.
+lands (see
+https://github.com/OpenPrinting/system-config-printer/issues/445);
+selecting the driver manually works fine. The CUPS web interface is not
+affected.
 
 ## Authorship
 

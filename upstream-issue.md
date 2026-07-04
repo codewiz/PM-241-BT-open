@@ -1,4 +1,4 @@
-# Draft issue for github.com/OpenPrinting/system-config-printer
+# Filed as https://github.com/OpenPrinting/system-config-printer/issues/445
 
 Title: cupshelpers: devices with an empty MFG in their IEEE 1284 device
 ID can never match any PPD
