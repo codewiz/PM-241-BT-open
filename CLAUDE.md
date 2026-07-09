@@ -66,6 +66,32 @@ client-side via that D-Bus service; CUPS-side lpinfo tests don't
 reproduce KDE behavior. CUPS logs go to the journal on Fedora
 (journalctl -u cups), not /var/log/cups.
 
+## Japanese PDFs: missing digits/romaji (fixed 2026-07-09)
+
+Clickpost labels (and many JP PDFs) reference MS-Gothic/MS-Mincho
+without embedding them. Ghostscript's fontconfig fallback substitutes
+Droid Sans Fallback, which silently drops ALL halfwidth glyphs (digits,
+romaji) from 90ms-RKSJ-encoded CID fonts - a printed label loses the
+postcode and tracking number while kanji look fine. Poppler substitutes
+correctly, so PDF viewers show nothing wrong. Affects every CUPS queue
+that rasterizes via gstoraster/gs, not just this driver.
+
+Fix on Bernie's machine: /usr/share/cups/fonts/cidfmap maps the MS font
+families to ipa-gothic-fonts/ipa-mincho-fonts (both installed via dnf).
+That path works because cups-filters invokes gs with
+-I/usr/share/cups/fonts, and no rpm owns the directory, so it survives
+updates. Env-based approaches (GS_LIB, cupsd SetEnv) do NOT work:
+cfFilterGhostscript execs gs with a scrubbed environment. Verify with
+cupsfilter + rastertotspl + PIL decode (see Testing above); a known-good
+sample is ~/Desktop/628668669145.pdf.
+
+Root cause is Fedora packaging: ghostscript symlinks
+Resource/CIDFSubst/DroidSansFallback.ttf to DroidSansFallbackFull.ttf,
+which has NO Latin glyphs (upstream's bundled copy does). Reported
+2026-07-09: https://bugzilla.redhat.com/show_bug.cgi?id=2498396
+(fedora-ghostscript-issue.md, minimal repro msgothic-repro.pdf).
+If Fedora fixes it, the local cidfmap can stay (harmless) or go.
+
 ## Release / CI
 
 - Remotes: github (codewiz/PM-241-BT-open, gh authed) and gitlab
